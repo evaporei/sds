@@ -2,9 +2,10 @@ package sds_demo
 
 import sds ".."
 import "core:fmt"
-import "core:thread"
 import "core:math/rand"
 import "core:time"
+
+import "vendor/ito"
 
 SPSC_TEST_NUM :: 512
 
@@ -116,15 +117,17 @@ main :: proc() {
             spsc_state.input[i] = rand.uint64()
         }
 
-        prod := thread.create(proc(th: ^thread.Thread) {
+        prod: ito.Thread
+        ito.thread_init(&prod, proc(_arg: rawptr) {
             for i in 0..<SPSC_TEST_NUM {
                 inp := spsc_state.input[i]
                 for !sds.spsc_push(&spsc_state.queue, inp) {}
                 fmt.println("PROD", i, "pushed", inp, "prod head", spsc_state.queue.producer_head)
             }
-        })
+        }, nil)
 
-        cons := thread.create(proc(th: ^thread.Thread) {
+        cons: ito.Thread
+        ito.thread_init(&cons, proc(_arg: rawptr) {
             index := 0
             for index < SPSC_TEST_NUM {
                 data := sds.spsc_pop(&spsc_state.queue) or_continue
@@ -133,12 +136,10 @@ main :: proc() {
                 index += 1
                 // if index % 10 == 0 do time.sleep(time.Millisecond * 10)
             }
-        })
+        }, nil)
 
-        thread.start(prod)
-        thread.start(cons)
-
-        thread.join_multiple(prod, cons)
+        ito.thread_join(&prod)
+        ito.thread_join(&cons)
 
         // The values have to be the same and in the same exact order
         for i in 0..<SPSC_TEST_NUM {
